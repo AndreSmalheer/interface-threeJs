@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass";
 import LoadingScreen from "../Components/LoadingScreen/LoadingScreen";
+import InfoPanel from "../Components/InfoPanel/InfoPanel";
 
 function Scene(mount) {
   const scene = new THREE.Scene();
@@ -39,15 +43,30 @@ function Scene(mount) {
 
   controls.target.set(0, 0, 0);
 
-  const sunLight = new THREE.PointLight(0xffffff, 10, 3000);
-  const ambient = new THREE.AmbientLight(0xffffff, 2.2);
+  const sunLight = new THREE.PointLight(0xffffff, 8, 3000);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.15);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x000000, 0.4);
   scene.add(sunLight);
   scene.add(ambient);
+  scene.add(hemi);
+
+  const composer = new EffectComposer(renderer);
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.45,
+    0.4,
+    0.25,
+  );
+  composer.addPass(bloomPass);
 
   const handleResize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
   };
 
   window.addEventListener("resize", handleResize);
@@ -72,6 +91,7 @@ function Scene(mount) {
     camera,
     renderer,
     controls,
+    composer,
     makeCanvas,
     canvasTex,
     cleanup: () => window.removeEventListener("resize", handleResize),
@@ -146,47 +166,234 @@ function Stars(scene) {
   return stars;
 }
 
-function OrbiterRings(scene) {
-  const rings = [];
+function createCameraAnimator(camera, controls) {
+  const state = {
+    active: false,
+    animateTarget: true,
+    targetPos: new THREE.Vector3(),
+    targetLook: new THREE.Vector3(),
+    speed: 0.045,
+    onComplete: null,
+  };
 
-  const orbits = [
-    { radius: 80,  color: 0x444466 },
-    { radius: 130, color: 0x444466 },
-    { radius: 190, color: 0x444466 },
-    { radius: 260, color: 0x444466 },
-    { radius: 340, color: 0x444466 },
-    { radius: 430, color: 0x444466 },
-    { radius: 530, color: 0x444466 },
-    { radius: 640, color: 0x444466 },
-  ];
+  const currentPos = new THREE.Vector3();
+  const currentLook = new THREE.Vector3();
 
-  orbits.forEach(({ radius, color }) => {
-    const points = [];
-    for (let i = 0; i <= 128; i++) {
-      const angle = (i / 128) * Math.PI * 2;
-      points.push(new THREE.Vector3(
-        Math.cos(angle) * radius,
-        0,
-        Math.sin(angle) * radius,
-      ));
+  function tick() {
+    if (!state.active) return;
+
+    currentPos.copy(camera.position);
+    currentPos.lerp(state.targetPos, state.speed);
+    camera.position.copy(currentPos);
+
+    if (state.animateTarget) {
+      currentLook.copy(controls.target);
+      currentLook.lerp(state.targetLook, state.speed);
+      controls.target.copy(currentLook);
     }
 
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({ color, opacity: 0.4, transparent: true });
-    const ring = new THREE.LineLoop(geo, mat);
+    const posClose = camera.position.distanceTo(state.targetPos) < 1.5;
+    const lookClose =
+      !state.animateTarget ||
+      controls.target.distanceTo(state.targetLook) < 1.5;
 
-    scene.add(ring);
-    rings.push({ ring, radius });
+    if (posClose && lookClose) {
+      camera.position.copy(state.targetPos);
+      if (state.animateTarget) controls.target.copy(state.targetLook);
+      state.active = false;
+      if (state.onComplete) state.onComplete();
+    }
+  }
+
+  function moveTo(
+    pos,
+    look,
+    speed = 0.045,
+    animateTarget = true,
+    onComplete = null,
+  ) {
+    state.targetPos.copy(pos);
+    state.targetLook.copy(look);
+    state.speed = speed;
+    state.animateTarget = animateTarget;
+    state.active = true;
+    state.onComplete = onComplete;
+  }
+
+  function stop() {
+    if (state.active) {
+      state.active = false;
+      if (state.onComplete) state.onComplete();
+    }
+  }
+
+  return { tick, moveTo, stop, state };
+}
+
+const SUN_INFO = {
+  name: "The Sun",
+  facts: [
+    { label: "Type", value: "G-type main-sequence star" },
+    { label: "Age", value: "~4.6 billion years" },
+    { label: "Diameter", value: "1,392,700 km" },
+    { label: "Surface temp", value: "5,778 K" },
+    { label: "Distance from Earth", value: "149.6 million km" },
+  ],
+  description:
+    "The Sun is the star at the centre of our solar system. Its gravity holds everything together — from the eight planets to distant comets. It accounts for 99.86% of the solar system's total mass.",
+};
+
+const PLANETS_DATA = [
+  {
+    name: "Mercury",
+    radius: 4,
+    distance: 80,
+    speed: 0.00082,
+    rotationSpeed: 0.001,
+    color: 0x888888,
+    info: {
+      name: "Mercury",
+      facts: [
+        { label: "Type", value: "Terrestrial planet" },
+        { label: "Orbit period", value: "88 days" },
+        { label: "Surface temp", value: "100 to 700 K" },
+      ],
+      description:
+        "Mercury is the smallest planet in the Solar System and the closest to the Sun.",
+    },
+  },
+  {
+    name: "Venus",
+    radius: 7,
+    distance: 130,
+    speed: 0.00032,
+    rotationSpeed: 0.0005,
+    color: 0xe3bb76,
+    info: {
+      name: "Venus",
+      facts: [
+        { label: "Type", value: "Terrestrial planet" },
+        { label: "Orbit period", value: "225 days" },
+        { label: "Surface temp", value: "737 K" },
+      ],
+      description:
+        "Venus is the second planet from the Sun. It is the hottest planet in our solar system.",
+    },
+  },
+  {
+    name: "Earth",
+    radius: 7.5,
+    distance: 190,
+    speed: 0.0002,
+    rotationSpeed: 0.005,
+    color: 0x2233ff,
+    info: {
+      name: "Earth",
+      facts: [
+        { label: "Type", value: "Terrestrial planet" },
+        { label: "Orbit period", value: "365.25 days" },
+        { label: "Population", value: "8+ billion" },
+      ],
+      description:
+        "Earth is our home planet and the only place we know of so far that’s inhabited by living things.",
+    },
+  },
+  {
+    name: "Mars",
+    radius: 5,
+    distance: 260,
+    speed: 0.00011,
+    rotationSpeed: 0.0045,
+    color: 0xff4422,
+    info: {
+      name: "Mars",
+      facts: [
+        { label: "Type", value: "Terrestrial planet" },
+        { label: "Orbit period", value: "1.88 years" },
+        { label: "Moons", value: "2" },
+      ],
+      description:
+        "Mars is a dusty, cold, desert world with a very thin atmosphere.",
+    },
+  },
+];
+
+function Planet(scene, data, utils) {
+  const pivot = new THREE.Object3D();
+  pivot.rotation.y = Math.random() * Math.PI * 2;
+  scene.add(pivot);
+
+  // Simple procedural texture
+  const texCanvas = utils.makeCanvas(128, (ctx, s) => {
+    ctx.fillStyle = `#${data.color.toString(16).padStart(6, "0")}`;
+    ctx.fillRect(0, 0, s, s);
+    for (let i = 0; i < 20; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.beginPath();
+      ctx.arc(
+        Math.random() * s,
+        Math.random() * s,
+        Math.random() * 10,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
   });
 
-  return { rings };
+  const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
+  const material = new THREE.MeshStandardMaterial({
+    map: utils.canvasTex(texCanvas),
+    roughness: 0.8,
+    metalness: 0.1,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.x = data.distance;
+  pivot.add(mesh);
+
+  const points = [];
+  for (let i = 0; i <= 128; i++) {
+    const angle = (i / 128) * Math.PI * 2;
+    points.push(
+      new THREE.Vector3(
+        Math.cos(angle) * data.distance,
+        0,
+        Math.sin(angle) * data.distance,
+      ),
+    );
+  }
+  const ringGeo = new THREE.BufferGeometry().setFromPoints(points);
+  const ringMat = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    opacity: 0.1,
+    transparent: true,
+  });
+  const ring = new THREE.LineLoop(ringGeo, ringMat);
+  scene.add(ring);
+
+  return {
+    mesh,
+    pivot,
+    data,
+  };
 }
 
 function SolarSystem() {
   const mountRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [loadingVisible, setLoadingVisible] = useState(true);
+  const [focused, setFocused] = useState(false);
+  const [currentInfo, setCurrentInfo] = useState(SUN_INFO);
   const sunRef = useRef(null);
+  const planetsRef = useRef([]);
+  const animatorRef = useRef(null);
+  const defaultCamPos = useRef(new THREE.Vector3(0, 120, 300));
+  const defaultTarget = useRef(new THREE.Vector3(0, 0, 0));
+  const controlsRef = useRef(null);
+  const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
+  const isFocusedRef = useRef(false);
+  const focusedPlanetRef = useRef(null);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -195,19 +402,22 @@ function SolarSystem() {
       camera,
       renderer,
       controls,
+      composer,
       makeCanvas,
       canvasTex,
       cleanup,
     } = Scene(mount);
-    const loader = new GLTFLoader();
 
+    controlsRef.current = controls;
+    rendererRef.current = renderer;
+    cameraRef.current = camera;
+
+    const loader = new GLTFLoader();
     Stars(scene);
-    OrbiterRings(scene)
 
     const sun = Sun(scene, loader, { makeCanvas, canvasTex }, () => {
       setTimeout(() => {
         setLoading(false);
-
         setTimeout(() => {
           setLoadingVisible(false);
         }, 1000);
@@ -216,24 +426,203 @@ function SolarSystem() {
 
     sunRef.current = sun;
 
+    const planets = PLANETS_DATA.map((data) =>
+      Planet(scene, data, { makeCanvas, canvasTex }),
+    );
+    planetsRef.current = planets;
+
+    const animator = createCameraAnimator(camera, controls);
+    animatorRef.current = animator;
+
+    const sunHitbox = new THREE.Mesh(
+      new THREE.SphereGeometry(16, 32, 32),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }),
+    );
+    scene.add(sunHitbox);
+
+    const interactableObjects = [
+      { mesh: sunHitbox, info: SUN_INFO, isSun: true },
+      ...planets.map((p) => ({
+        mesh: p.mesh,
+        info: p.data.info,
+        isSun: false,
+        planet: p,
+      })),
+    ];
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const mouseStart = new THREE.Vector2();
+
+    const handleMouseMove = (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(
+        interactableObjects.map((o) => o.mesh),
+      );
+
+      renderer.domElement.style.cursor =
+        hits.length > 0 && !isFocusedRef.current ? "pointer" : "default";
+    };
+
+    const handleMouseDown = (e) => {
+      mouseStart.set(e.clientX, e.clientY);
+      if (isFocusedRef.current) {
+        animator.stop();
+      }
+    };
+
+    const resetFocus = () => {
+      isFocusedRef.current = false;
+      focusedPlanetRef.current = null;
+      setFocused(false);
+      controls.enabled = false;
+      animator.moveTo(
+        defaultCamPos.current,
+        defaultTarget.current,
+        0.035,
+        true,
+        () => {
+          controls.enabled = true;
+        },
+      );
+    };
+
+    const handleClick = (e) => {
+      const mouseEnd = new THREE.Vector2(e.clientX, e.clientY);
+      if (mouseStart.distanceTo(mouseEnd) > 6) return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(
+        interactableObjects.map((o) => o.mesh),
+      );
+
+      if (hits.length > 0) {
+        const hit = hits[0];
+        const obj = interactableObjects.find((o) => o.mesh === hit.object);
+
+        const isSunClicked = obj.isSun;
+        const currentTargetIsSun =
+          isFocusedRef.current && focusedPlanetRef.current === null;
+        const currentTargetIsPlanet =
+          isFocusedRef.current && focusedPlanetRef.current !== null;
+
+        const isNewFocus =
+          !isFocusedRef.current ||
+          (isSunClicked && currentTargetIsPlanet) ||
+          (!isSunClicked &&
+            (currentTargetIsSun || focusedPlanetRef.current !== obj.planet));
+
+        if (isNewFocus) {
+          if (!isFocusedRef.current) {
+            defaultCamPos.current.copy(camera.position);
+            defaultTarget.current.copy(controls.target);
+          }
+
+          setCurrentInfo(obj.info);
+
+          let focusPos, focusLook;
+          const worldPos = new THREE.Vector3();
+
+          if (obj.isSun) {
+            focusedPlanetRef.current = null;
+            focusPos = new THREE.Vector3(0, 40, 80);
+            focusLook = new THREE.Vector3(0, 0, 0);
+          } else {
+            focusedPlanetRef.current = obj.planet;
+            obj.mesh.getWorldPosition(worldPos);
+            focusLook = worldPos.clone();
+            const offset = new THREE.Vector3(0, 15, 30);
+            focusPos = worldPos.clone().add(offset);
+          }
+
+          isFocusedRef.current = true;
+          setFocused(true);
+
+          controls.target.copy(focusLook);
+          controls.enabled = true;
+
+          animator.moveTo(focusPos, focusLook, 0.05, false);
+        } else {
+          resetFocus();
+        }
+      } else if (isFocusedRef.current) {
+        resetFocus();
+      }
+
+      renderer.domElement.style.cursor = "default";
+    };
+
+    renderer.domElement.addEventListener("click", handleClick);
+    renderer.domElement.addEventListener("mousedown", handleMouseDown);
+    renderer.domElement.addEventListener("mousemove", handleMouseMove);
+
     const animate = () => {
       requestAnimationFrame(animate);
 
       const sunObj = sunRef.current?.get();
       if (sunObj) sunObj.rotation.y += 0.0005;
 
+      planetsRef.current.forEach((p) => {
+        p.pivot.rotation.y += p.data.speed;
+        p.mesh.rotation.y += p.data.rotationSpeed;
+        p.mesh.updateWorldMatrix(true, false);
+      });
+
+      if (focusedPlanetRef.current && isFocusedRef.current) {
+        const p = focusedPlanetRef.current;
+        const worldPos = new THREE.Vector3();
+        p.mesh.getWorldPosition(worldPos);
+
+        if (animator.state.active) {
+          animator.state.targetLook.copy(worldPos);
+          const offset = new THREE.Vector3(0, 15, 30);
+          animator.state.targetPos.copy(worldPos).add(offset);
+
+          if (!animator.state.animateTarget) {
+            controls.target.copy(worldPos);
+          }
+        } else {
+          const delta = worldPos.clone().sub(controls.target);
+          controls.target.copy(worldPos);
+          camera.position.add(delta);
+        }
+      }
+
+      animator.tick();
       controls.update();
-      renderer.render(scene, camera);
+      composer.render();
     };
 
     animate();
 
     return () => {
       cleanup();
+      renderer.domElement.removeEventListener("click", handleClick);
+      renderer.domElement.removeEventListener("mousedown", handleMouseDown);
+      renderer.domElement.removeEventListener("mousemove", handleMouseMove);
       mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
   }, []);
+
+  const handleClose = () => {
+    if (!isFocusedRef.current) return;
+    isFocusedRef.current = false;
+    setFocused(false);
+    const controls = controlsRef.current;
+    const animator = animatorRef.current;
+    if (!controls || !animator) return;
+    controls.enabled = false;
+    animator.moveTo(defaultCamPos.current, defaultTarget.current, 0.035, () => {
+      controls.enabled = true;
+    });
+  };
 
   return (
     <div
@@ -242,10 +631,12 @@ function SolarSystem() {
         width: "100vw",
         height: "100vh",
         overflow: "hidden",
+        cursor: focused ? "default" : "pointer",
       }}
     >
       <div ref={mountRef} />
       {loadingVisible && <LoadingScreen isVisible={loading} />}
+      {focused && <InfoPanel info={currentInfo} onClose={handleClose} />}
     </div>
   );
 }
