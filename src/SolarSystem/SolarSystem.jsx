@@ -230,123 +230,110 @@ function createCameraAnimator(camera, controls) {
   return { tick, moveTo, stop, state };
 }
 
-const SUN_INFO = {
-  name: "The Sun",
-  facts: [
-    { label: "Type", value: "G-type main-sequence star" },
-    { label: "Age", value: "~4.6 billion years" },
-    { label: "Diameter", value: "1,392,700 km" },
-    { label: "Surface temp", value: "5,778 K" },
-    { label: "Distance from Earth", value: "149.6 million km" },
+const SOLAR_SYSTEM_DATA = {
+  sun: {
+    name: "The Sun",
+    facts: [
+      { label: "Type", value: "G-type main-sequence star" },
+      { label: "Age", value: "~4.6 billion years" },
+      { label: "Diameter", value: "1,392,700 km" },
+      { label: "Surface temp", value: "5,778 K" },
+      { label: "Distance from Earth", value: "149.6 million km" },
+    ],
+    description:
+      "The Sun is the star at the centre of our solar system. Its gravity holds everything together — from the eight planets to distant comets. It accounts for 99.86% of the solar system's total mass.",
+  },
+
+  planets: [
+    {
+      name: "Mercury",
+      radius: 9, // was 4
+      distance: 80,
+      speed: 0.00082,
+      rotationSpeed: 0.0005,
+      textureUrl: "/textures/mercury.jpg",
+      info: {
+        name: "Mercury",
+        facts: [
+          { label: "Type", value: "Terrestrial planet" },
+          { label: "Orbit period", value: "88 days" },
+          { label: "Surface temp", value: "100 to 700 K" },
+        ],
+        description:
+          "Mercury is the smallest planet in the Solar System and the closest to the Sun.",
+      },
+    },
+    {
+      name: "Venus",
+      radius: 14, // was 7
+      distance: 130,
+      speed: 0.00032,
+      rotationSpeed: 0.0005,
+      textureUrl: "/textures/venus.jpg",
+      info: {
+        name: "Venus",
+        facts: [
+          { label: "Type", value: "Terrestrial planet" },
+          { label: "Orbit period", value: "225 days" },
+          { label: "Surface temp", value: "737 K" },
+        ],
+        description:
+          "Venus is the second planet from the Sun. It is the hottest planet in our solar system.",
+      },
+    },
+    {
+      name: "Earth",
+      radius: 15, // was 7.5
+      distance: 190,
+      speed: 0.0002,
+      rotationSpeed: 0.0008,
+      textureUrl: "/textures/earth.jpg",
+      info: {
+        name: "Earth",
+        facts: [
+          { label: "Type", value: "Terrestrial planet" },
+          { label: "Orbit period", value: "365.25 days" },
+          { label: "Population", value: "8+ billion" },
+        ],
+        description:
+          "Earth is our home planet and the only place we know of so far that’s inhabited by living things.",
+      },
+    },
+    {
+      name: "Mars",
+      radius: 10, // was 5
+      distance: 260,
+      speed: 0.00011,
+      rotationSpeed: 0.0005,
+      textureUrl: "/textures/mars.jpg",
+      info: {
+        name: "Mars",
+        facts: [
+          { label: "Type", value: "Terrestrial planet" },
+          { label: "Orbit period", value: "1.88 years" },
+          { label: "Moons", value: "2" },
+        ],
+        description:
+          "Mars is a dusty, cold, desert world with a very thin atmosphere.",
+      },
+    },
   ],
-  description:
-    "The Sun is the star at the centre of our solar system. Its gravity holds everything together — from the eight planets to distant comets. It accounts for 99.86% of the solar system's total mass.",
 };
 
-const PLANETS_DATA = [
-  {
-    name: "Mercury",
-    radius: 4,
-    distance: 80,
-    speed: 0.00082,
-    rotationSpeed: 0.001,
-    color: 0x888888,
-    info: {
-      name: "Mercury",
-      facts: [
-        { label: "Type", value: "Terrestrial planet" },
-        { label: "Orbit period", value: "88 days" },
-        { label: "Surface temp", value: "100 to 700 K" },
-      ],
-      description:
-        "Mercury is the smallest planet in the Solar System and the closest to the Sun.",
-    },
-  },
-  {
-    name: "Venus",
-    radius: 7,
-    distance: 130,
-    speed: 0.00032,
-    rotationSpeed: 0.0005,
-    color: 0xe3bb76,
-    info: {
-      name: "Venus",
-      facts: [
-        { label: "Type", value: "Terrestrial planet" },
-        { label: "Orbit period", value: "225 days" },
-        { label: "Surface temp", value: "737 K" },
-      ],
-      description:
-        "Venus is the second planet from the Sun. It is the hottest planet in our solar system.",
-    },
-  },
-  {
-    name: "Earth",
-    radius: 7.5,
-    distance: 190,
-    speed: 0.0002,
-    rotationSpeed: 0.005,
-    color: 0x2233ff,
-    info: {
-      name: "Earth",
-      facts: [
-        { label: "Type", value: "Terrestrial planet" },
-        { label: "Orbit period", value: "365.25 days" },
-        { label: "Population", value: "8+ billion" },
-      ],
-      description:
-        "Earth is our home planet and the only place we know of so far that’s inhabited by living things.",
-    },
-  },
-  {
-    name: "Mars",
-    radius: 5,
-    distance: 260,
-    speed: 0.00011,
-    rotationSpeed: 0.0045,
-    color: 0xff4422,
-    info: {
-      name: "Mars",
-      facts: [
-        { label: "Type", value: "Terrestrial planet" },
-        { label: "Orbit period", value: "1.88 years" },
-        { label: "Moons", value: "2" },
-      ],
-      description:
-        "Mars is a dusty, cold, desert world with a very thin atmosphere.",
-    },
-  },
-];
-
-function Planet(scene, data, utils) {
+function Planet(scene, data, utils, loaders = {}) {
   const pivot = new THREE.Object3D();
   pivot.rotation.y = Math.random() * Math.PI * 2;
   scene.add(pivot);
 
-  // Simple procedural texture
-  const texCanvas = utils.makeCanvas(128, (ctx, s) => {
-    ctx.fillStyle = `#${data.color.toString(16).padStart(6, "0")}`;
-    ctx.fillRect(0, 0, s, s);
-    for (let i = 0; i < 20; i++) {
-      ctx.fillStyle = "rgba(0,0,0,0.2)";
-      ctx.beginPath();
-      ctx.arc(
-        Math.random() * s,
-        Math.random() * s,
-        Math.random() * 10,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
+  let material;
+  const map = loaders.texture.load(data.textureUrl);
+  material = new THREE.MeshStandardMaterial({
+    map,
+    roughness: 0.8,
+    emissiveIntensity: 0.1,
   });
 
   const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
-  const material = new THREE.MeshStandardMaterial({
-    map: utils.canvasTex(texCanvas),
-    roughness: 0.8,
-    metalness: 0.1,
-  });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.x = data.distance;
   pivot.add(mesh);
@@ -362,6 +349,7 @@ function Planet(scene, data, utils) {
       ),
     );
   }
+
   const ringGeo = new THREE.BufferGeometry().setFromPoints(points);
   const ringMat = new THREE.LineBasicMaterial({
     color: 0xffffff,
@@ -383,7 +371,7 @@ function SolarSystem() {
   const [loading, setLoading] = useState(true);
   const [loadingVisible, setLoadingVisible] = useState(true);
   const [focused, setFocused] = useState(false);
-  const [currentInfo, setCurrentInfo] = useState(SUN_INFO);
+  const [currentInfo, setCurrentInfo] = useState(SOLAR_SYSTEM_DATA.sun);
   const sunRef = useRef(null);
   const planetsRef = useRef([]);
   const animatorRef = useRef(null);
@@ -413,6 +401,7 @@ function SolarSystem() {
     cameraRef.current = camera;
 
     const loader = new GLTFLoader();
+    const textureLoader = new THREE.TextureLoader();
     Stars(scene);
 
     const sun = Sun(scene, loader, { makeCanvas, canvasTex }, () => {
@@ -426,8 +415,13 @@ function SolarSystem() {
 
     sunRef.current = sun;
 
-    const planets = PLANETS_DATA.map((data) =>
-      Planet(scene, data, { makeCanvas, canvasTex }),
+    const planets = SOLAR_SYSTEM_DATA.planets.map((data) =>
+      Planet(
+        scene,
+        data,
+        { makeCanvas, canvasTex },
+        { texture: textureLoader },
+      ),
     );
     planetsRef.current = planets;
 
@@ -441,7 +435,7 @@ function SolarSystem() {
     scene.add(sunHitbox);
 
     const interactableObjects = [
-      { mesh: sunHitbox, info: SUN_INFO, isSun: true },
+      { mesh: sunHitbox, info: SOLAR_SYSTEM_DATA.sun, isSun: true },
       ...planets.map((p) => ({
         mesh: p.mesh,
         info: p.data.info,

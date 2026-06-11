@@ -5,9 +5,7 @@ function LoadingScreen({ isVisible }) {
     <div className={`loading-screen ${!isVisible ? "hide" : ""}`}>
       <div className="loading-spinner" />
 
-      <span className="loading-text">
-        Loading Solar system
-      </span>
+      <span className="loading-text">Loading</span>
     </div>
   );
 }
