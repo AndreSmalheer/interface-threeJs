@@ -6,7 +6,8 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass";
 import LoadingScreen from "../Components/LoadingScreen/LoadingScreen";
-import InfoPanel from "../Components/InfoPanel/InfoPanel";
+import InfoPanel from "../Components/InfoPanel/InfoPanel.jsx";
+import { gsap } from "gsap";
 
 function Scene(mount) {
   const scene = new THREE.Scene();
@@ -528,10 +529,13 @@ function SolarSystem() {
             focusPos = new THREE.Vector3(0, 40, 80);
             focusLook = new THREE.Vector3(0, 0, 0);
           } else {
+            console.log("moving camera in");
             focusedPlanetRef.current = obj.planet;
             obj.mesh.getWorldPosition(worldPos);
             focusLook = worldPos.clone();
-            const offset = new THREE.Vector3(0, 15, 30);
+            const distance = 60;
+            const offset = new THREE.Vector3(0, distance * 0.5, distance);
+            animator.state.targetPos.copy(worldPos).add(offset);
             focusPos = worldPos.clone().add(offset);
           }
 
