@@ -1,13 +1,14 @@
 import * as THREE from "three";
+import { gsap } from "gsap";
 
 function Planet(scene, data, utils, loaders = {}) {
   const pivot = new THREE.Object3D();
   pivot.rotation.y = Math.random() * Math.PI * 2;
   scene.add(pivot);
 
-  let material;
   const map = loaders.texture.load(data.textureUrl);
-  material = new THREE.MeshStandardMaterial({
+
+  const material = new THREE.MeshStandardMaterial({
     map,
     roughness: 0.8,
     emissiveIntensity: 0.1,
@@ -36,8 +37,26 @@ function Planet(scene, data, utils, loaders = {}) {
     opacity: 0.1,
     transparent: true,
   });
+
   const ring = new THREE.LineLoop(ringGeo, ringMat);
   scene.add(ring);
+
+  const orbitDuration = (Math.PI * 2) / (data.speed * 60 * 4);
+  const rotationDuration = (Math.PI * 2) / (data.rotationSpeed * 60 * 4);
+
+  gsap.to(pivot.rotation, {
+    y: "+=" + Math.PI * 2,
+    duration: orbitDuration,
+    ease: "none",
+    repeat: -1,
+  });
+
+  gsap.to(mesh.rotation, {
+    y: "+=" + Math.PI * 2,
+    duration: rotationDuration,
+    ease: "none",
+    repeat: -1,
+  });
 
   return {
     mesh,
@@ -46,4 +65,4 @@ function Planet(scene, data, utils, loaders = {}) {
   };
 }
 
-export default Planet
+export default Planet;

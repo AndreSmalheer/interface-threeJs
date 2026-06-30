@@ -89,7 +89,7 @@ const SOLAR_SYSTEM_DATA = {
   planets: [
     {
       name: "Mercury",
-      radius: 9, // was 4
+      radius: 9,
       distance: 80,
       speed: 0.00082,
       rotationSpeed: 0.0005,
@@ -107,7 +107,7 @@ const SOLAR_SYSTEM_DATA = {
     },
     {
       name: "Venus",
-      radius: 14, // was 7
+      radius: 14,
       distance: 130,
       speed: 0.00032,
       rotationSpeed: 0.0005,
@@ -125,7 +125,7 @@ const SOLAR_SYSTEM_DATA = {
     },
     {
       name: "Earth",
-      radius: 15, // was 7.5
+      radius: 15,
       distance: 190,
       speed: 0.0002,
       rotationSpeed: 0.0008,
@@ -143,7 +143,7 @@ const SOLAR_SYSTEM_DATA = {
     },
     {
       name: "Mars",
-      radius: 10, // was 5
+      radius: 10,
       distance: 260,
       speed: 0.00011,
       rotationSpeed: 0.0005,
@@ -360,12 +360,6 @@ function SolarSystem() {
 
       const sunObj = sunRef.current?.get();
       if (sunObj) sunObj.rotation.y += 0.0005;
-
-      planetsRef.current.forEach((p) => {
-        p.pivot.rotation.y += p.data.speed;
-        p.mesh.rotation.y += p.data.rotationSpeed;
-        p.mesh.updateWorldMatrix(true, false);
-      });
 
       if (focusedPlanetRef.current && isFocusedRef.current) {
         const p = focusedPlanetRef.current;
